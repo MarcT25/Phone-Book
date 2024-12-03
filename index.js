@@ -6,6 +6,7 @@ const cors = require('cors')
 const app = express()
 
 app.use(express.json())
+app.use(express.static('dist'))
 app.use(cors())
 //new token for morgan to make the JSON request into a string.
 morgan.token('body', req => {
