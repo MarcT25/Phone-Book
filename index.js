@@ -2,6 +2,9 @@
 const express = require('express')
 const morgan = require('morgan')
 const cors = require('cors')
+const Person = require('./models/personDB')
+
+
 //creates a variable 'app' to use the express library.
 const app = express()
 
@@ -9,8 +12,8 @@ app.use(express.json())
 app.use(express.static('dist'))
 app.use(cors())
 //new token for morgan to make the JSON request into a string.
-morgan.token('body', req => {
-    return JSON.stringify(req.body)
+morgan.token('body', request => {
+    return JSON.stringify(request.body)
   })
 
   app.use(morgan(':method :url :body'))
@@ -47,23 +50,19 @@ let persons = [
   })
 
     //defines an event handler that handles HTTP GET requests
-    //made to fetch the notes path of the application.
+    //made to fetch the person path of the application.
   app.get('/api/persons', (request, response) => {
-    response.json(persons)
+    Person.find({}).then(person => {
+      response.json(person)
+    })
   })
 
     //defines an event handler that handles HTTP GET requests
-    //made to fetch the note matching the ID number.
+    //made to fetch the person matching the ID number.
   app.get('/api/persons/:id', (request,response) => {
-    const id = request.params.id
-    const person = persons.find(p => p.id === id)
-    //if the note is found return the note, else return status 404
-    if(person){
+    Person.findById(request.params.id).then(person => {
       response.json(person)
-    } else {
-        //set status to 404(not found) and end the process without sending data.
-      response.status(404).end()
-    }
+    })
   })
 
     //defines an event handler that handles HTTP DELETE requests
@@ -76,41 +75,34 @@ let persons = [
     response.status(204).end()
   })
 
-  // tot generate id for new entries.
-  const generateId = () => {
-    const maxId = persons.length > 0
-      ? Math.max(...persons.map(n => Number(n.id)))
-      : 0
-    return String(maxId + 1)
-  }
-
 
   app.post('/api/persons', (request, response) => {
     const body = request.body
   
     //if body does not contain firstname and phoneNumber throw error.
-    if (!body.firstName || !body.phoneNumber) {
+    if (body.name === undefined || body.number === undefined) {
       return response.status(400).json({ 
         error: 'name or number are missing' 
       })
     }
 
     //checks if a name is arleady in existence and returns a error if true.
-    const existingName = persons.find((p) => p.name === body.firstName)
+    const existingName = persons.find((p) => p.name === body.name)
     if(existingName){
         response.status(400).json({ error: 'name must be unique' })
     }
 
   
-    const person = {
-      name: body.firstName,
-      number: body.phoneNumber,
-      id: generateId(),
-    }
-  
-    persons = persons.concat(person)
-  
-    response.json(persons)
+    const person = new Person({
+      name: body.name,
+      number: body.number,
+    })
+
+    person.save().then(savedPerson => {
+      response.json(savedPerson) 
+
+    })
+
   })
 
   //returns the info from the phonebook
@@ -129,7 +121,7 @@ let persons = [
   app.use(unknownEndpoint)
 
 
-  const PORT = process.env.PORT || 3001 // using port defined in the enviromental variable.
+  const PORT = process.env.PORT // using port defined in the enviromental variable.
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`)
   })
