@@ -8,9 +8,11 @@ const Person = require('./models/personDB')
 //creates a variable 'app' to use the express library.
 const app = express()
 
-app.use(express.json())
 app.use(express.static('dist'))
+app.use(express.json())
 app.use(cors())
+
+
 //new token for morgan to make the JSON request into a string.
 morgan.token('body', request => {
     return JSON.stringify(request.body)
@@ -42,6 +44,7 @@ let persons = [
     }
 ]
 
+
   // defines an event handler that is used 
   //to handle HTTP GET requests made to the application's / root.
   app.get('/', (request, response) =>{
@@ -59,24 +62,30 @@ let persons = [
 
     //defines an event handler that handles HTTP GET requests
     //made to fetch the person matching the ID number.
-  app.get('/api/persons/:id', (request,response) => {
-    Person.findById(request.params.id).then(person => {
-      response.json(person)
+  app.get('/api/persons/:id', (request,response,next) => {
+    Person.findById(request.params.id)
+    .then(person => {
+      if(person) {
+        response.json(person)
+      } else {
+        response.status(404).end()
+      }
     })
-  })
+    .catch((error) => next(error))
+    })
 
     //defines an event handler that handles HTTP DELETE requests
-    //made to remove the note matching the ID number.
-  app.delete('/api/persons/:id', (request, response) =>{
-    const id = request.params.id
-    persons = persons.filter(p => p.id !== id)
-
-
-    response.status(204).end()
+    //made to remove the person matching the ID number.
+  app.delete('/api/persons/:id', (request, response, next) =>{
+    Person.findByIdAndDelete(request.params.id)
+    .then(result => {
+      response.status(204).end()
+    })
+    .catch((error) => next(error))
   })
 
 
-  app.post('/api/persons', (request, response) => {
+  app.post('/api/persons', (request, response, next) => {
     const body = request.body
   
     //if body does not contain firstname and phoneNumber throw error.
@@ -99,26 +108,61 @@ let persons = [
     })
 
     person.save().then(savedPerson => {
-      response.json(savedPerson) 
+      response.json(savedPerson)
 
     })
+    .catch(error => next(error))
 
   })
 
+  //updates the phone number if the name is already in the database
+  app.put('/api/persons/:id', async (request, response, next) =>{
+    const body  = request.body
+
+    const person = {
+      name: body.name,
+      number: body.number
+    }
+
+    await Person.findByIdAndUpdate(request.params.id, person, {new: true, runValidators: true, context: 'query'})
+    .then(updatedPerson => {
+      if(updatedPerson) {
+        response.json(updatedPerson)
+      } else {
+        response.status(404).end()
+      }
+    })
+    .catch((error) => next(error))
+  })
+
   //returns the info from the phonebook
-  app.get('/info', (request,response) => {
+  app.get('/info', async (request,response) => {
     const requestTime = new Date()
-    response.send(`<p>Phonebook has info for ${persons.length} people</p> <br/>
+    const count = await Person.countDocuments()
+    response.send(`<p>Phonebook has info for ${count} people</p> <br/>
                     ${requestTime}`)
     console.log(requestTime)
   })
 
-  
   const unknownEndpoint = (request, response) => {
     response.status(404).send({ error: 'unknown endpoint' })
   }
   
   app.use(unknownEndpoint)
+
+  const errorHandler = (error, request, response, next) => {
+    console.error(error.message)
+
+    if(error.name === "ValidationError"){
+      return response.status(400).json({error: error.message})
+    } else if(error.name === "CastError") {
+      return response.status(400).json({error: error.message})
+    }
+
+    next(error)
+  }
+
+  app.use(errorHandler)
 
 
   const PORT = process.env.PORT // using port defined in the enviromental variable.
